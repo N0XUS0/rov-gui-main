@@ -5,15 +5,19 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt, QTimer, QTime, QProcess
-
 import cv2
 from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtWidgets import QWidget, QGridLayout, QLabel, QSizePolicy
+from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtWidgets import QGroupBox, QVBoxLayout, QPushButton
 
 class CameraWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Live Cameras")
-        self.setGeometry(100, 100, 1300, 700)
+        self.showFullScreen()  # Full screen
+        self.setStyleSheet("background-color: gray;")  # خلفية رمادي
 
         self.layout = QGridLayout()
         self.setLayout(self.layout)
@@ -21,14 +25,14 @@ class CameraWindow(QWidget):
         self.captures = []
         self.labels = []
 
-        # شغل أول 4 كاميرات
         for i in range(4):
             cap = cv2.VideoCapture(i)
             self.captures.append(cap)
 
             label = QLabel()
-            label.setFixedSize(620, 360)
             label.setStyleSheet("background-color: black;")
+            label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)  # make it responsive
+            label.setAlignment(Qt.AlignCenter)
             self.labels.append(label)
             self.layout.addWidget(label, i // 2, i % 2)
 
@@ -41,8 +45,10 @@ class CameraWindow(QWidget):
             ret, frame = cap.read()
             if ret:
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                h = self.labels[i].height()
+                w = self.labels[i].width()
                 image = QImage(frame.data, frame.shape[1], frame.shape[0], QImage.Format_RGB888)
-                pixmap = QPixmap.fromImage(image).scaled(self.labels[i].width(), self.labels[i].height(), Qt.KeepAspectRatio)
+                pixmap = QPixmap.fromImage(image).scaled(w, h, Qt.KeepAspectRatio)
                 self.labels[i].setPixmap(pixmap)
 
     def closeEvent(self, event):
@@ -55,7 +61,7 @@ class ControlPanelWindow(QWidget):
         super().__init__()
         self.setWindowTitle("ROV Control Panel")
         self.setGeometry(200, 100, 1400, 900)
-        self.setStyleSheet("background-color: #2c2c2c; color: white;")
+        self.setStyleSheet("background-color: #141414; color: white;")
         self.process = None
         self.init_ui()
 
@@ -77,7 +83,7 @@ class ControlPanelWindow(QWidget):
         # زرار فتح كل الكاميرات
         self.open_all_cameras_button = QPushButton(" open cams ")
         self.open_all_cameras_button.setStyleSheet(
-            "background-color: #008CBA; color: white; padding: 10px; font-weight: bold;"
+            "background-color: orange; color: white; padding: 10px; font-weight: bold;" #blue button
         )
         self.open_all_cameras_button.clicked.connect(self.open_all_cameras)
 
@@ -91,13 +97,19 @@ class ControlPanelWindow(QWidget):
         # البانل اليمين
         right_panel = QVBoxLayout()
 
-        actuators_box = QGroupBox("Tasks")
+
+        actuators_box = QGroupBox("Missions")
         actuator_layout = QVBoxLayout()
-        for i in range(4):
-            btn = QPushButton(f"Task {i+1}")
+
+        # أسماء المهام
+        task_names = ["Upload Code", "Focus Mode", "3D Task"]
+
+        for i, name in enumerate(task_names):
+            btn = QPushButton(name)
             btn.setStyleSheet("background-color: orange; padding: 10px; font-weight: bold;")
             btn.clicked.connect(lambda _, num=i+1: self.run_task_script(num))
             actuator_layout.addWidget(btn)
+
         actuators_box.setLayout(actuator_layout)
 
         sensors_box = QGroupBox("Sensors")
