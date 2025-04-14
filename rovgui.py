@@ -56,6 +56,16 @@ class CameraWindow(QWidget):
             cap.release()
         event.accept()
 
+import sys
+import cv2
+from PyQt5.QtWidgets import (
+    QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout,
+    QGroupBox, QComboBox, QSlider, QGridLayout, QTextEdit, QSizePolicy
+)
+from PyQt5.QtGui import QFont, QImage, QPixmap
+from PyQt5.QtCore import Qt, QTimer, QTime, QProcess
+
+
 class ControlPanelWindow(QWidget):
     def __init__(self):
         super().__init__()
@@ -68,7 +78,7 @@ class ControlPanelWindow(QWidget):
     def init_ui(self):
         main_layout = QHBoxLayout()
 
-        # الكاميرات
+        # كاميرات
         self.camera_layout = QGridLayout()
         self.camera_labels = []
         for i in range(4):
@@ -80,36 +90,28 @@ class ControlPanelWindow(QWidget):
         self.camera_positions = [0, 1, 2, 3]
         self.update_camera_grid()
 
-        # زرار فتح كل الكاميرات
         self.open_all_cameras_button = QPushButton(" open cams ")
         self.open_all_cameras_button.setStyleSheet(
-            "background-color: orange; color: white; padding: 10px; font-weight: bold;" #blue button
+            "background-color: orange; color: white; padding: 10px; font-weight: bold;"
         )
         self.open_all_cameras_button.clicked.connect(self.open_all_cameras)
 
-        # تجميع الكاميرات والزرار في Layout واحد
         camera_control_layout = QVBoxLayout()
         camera_control_layout.addLayout(self.camera_layout)
         camera_control_layout.addWidget(self.open_all_cameras_button)
         camera_widget = QWidget()
         camera_widget.setLayout(camera_control_layout)
 
-        # البانل اليمين
         right_panel = QVBoxLayout()
-
 
         actuators_box = QGroupBox("Missions")
         actuator_layout = QVBoxLayout()
-
-        # أسماء المهام
         task_names = ["Upload Code", "Focus Mode", "3D Task"]
-
         for i, name in enumerate(task_names):
             btn = QPushButton(name)
             btn.setStyleSheet("background-color: orange; padding: 10px; font-weight: bold;")
-            btn.clicked.connect(lambda _, num=i+1: self.run_task_script(num))
+            btn.clicked.connect(lambda _, num=i + 1: self.run_task_script(num))
             actuator_layout.addWidget(btn)
-
         actuators_box.setLayout(actuator_layout)
 
         sensors_box = QGroupBox("Sensors")
@@ -129,7 +131,7 @@ class ControlPanelWindow(QWidget):
             combo.setCurrentIndex(i)
             combo.currentIndexChanged.connect(self.switch_camera_positions)
             self.camera_dropdowns.append(combo)
-            camera_switch_layout.addWidget(QLabel(f"Camera {i+1} Position:"))
+            camera_switch_layout.addWidget(QLabel(f"Camera {i + 1} Position:"))
             camera_switch_layout.addWidget(combo)
         camera_switch_box.setLayout(camera_switch_layout)
 
@@ -262,9 +264,48 @@ class ControlPanelWindow(QWidget):
         self.timer_label.setText(self.time_elapsed.toString("hh:mm:ss"))
 
     def open_all_cameras(self):
-        self.output_display.append("فتح جميع الكاميرات...\n")
-        self.camera_window = CameraWindow()
-        self.camera_window.show()
+        self.output_display.append("فتح الكاميرات عبر RTSP...\n")
+
+        rtsp_urls = [
+            "rtsp://admin:Oirov*123@192.168.1.200:554/Streaming/Channels/101",
+            "rtsp://admin:Oirov*123@192.168.1.200:554/Streaming/Channels/201",
+            "rtsp://admin:Oirov*123@192.168.1.200:554/Streaming/Channels/301",
+            "rtsp://admin:Oirov*123@192.168.1.200:554/Streaming/Channels/401",
+        ]
+
+        self.rtsp_captures = []
+        self.active_cameras = []
+
+        for i, url in enumerate(rtsp_urls):
+            cap = cv2.VideoCapture(url)
+            ret, frame = cap.read()
+            if ret:
+                self.output_display.append(f"✅ Camera {i + 1} Connected\n")
+                self.rtsp_captures.append(cap)
+                self.active_cameras.append(i)
+            else:
+                self.output_display.append(f"❌ Camera {i + 1} Not Connected\n")
+                cap.release()
+                self.rtsp_captures.append(None)
+
+        self.camera_timer = QTimer()
+        self.camera_timer.timeout.connect(self.update_rtsp_frames)
+        self.camera_timer.start(30)
+
+    def update_rtsp_frames(self):
+        for i, cap in enumerate(self.rtsp_captures):
+            if cap is not None:
+                ret, frame = cap.read()
+                if ret:
+                    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    h = self.camera_labels[i].height()
+                    w = self.camera_labels[i].width()
+                    image = QImage(rgb_frame.data, frame.shape[1], frame.shape[0], QImage.Format_RGB888)
+                    pixmap = QPixmap.fromImage(image).scaled(w, h, Qt.KeepAspectRatio)
+                    self.camera_labels[i].setPixmap(pixmap)
+                else:
+                    self.camera_labels[i].setText("NO SIGNAL")
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
