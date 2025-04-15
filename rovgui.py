@@ -1,69 +1,37 @@
 import sys
-from PyQt5.QtWidgets import (
-    QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout,
-    QGroupBox, QComboBox, QSlider, QGridLayout, QTextEdit
-)
-from PyQt5.QtGui import QFont
-from PyQt5.QtCore import Qt, QTimer, QTime, QProcess
-import cv2
-from PyQt5.QtGui import QImage, QPixmap
-from PyQt5.QtWidgets import QWidget, QGridLayout, QLabel, QSizePolicy
-from PyQt5.QtGui import QImage, QPixmap
-from PyQt5.QtCore import QTimer, Qt
-from PyQt5.QtWidgets import QGroupBox, QVBoxLayout, QPushButton
-
-class CameraWindow(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Live Cameras")
-        self.showFullScreen()  # Full screen
-        self.setStyleSheet("background-color: gray;")  # خلفية رمادي
-
-        self.layout = QGridLayout()
-        self.setLayout(self.layout)
-
-        self.captures = []
-        self.labels = []
-
-        for i in range(4):
-            cap = cv2.VideoCapture(i)
-            self.captures.append(cap)
-
-            label = QLabel()
-            label.setStyleSheet("background-color: black;")
-            label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)  # make it responsive
-            label.setAlignment(Qt.AlignCenter)
-            self.labels.append(label)
-            self.layout.addWidget(label, i // 2, i % 2)
-
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update_frames)
-        self.timer.start(30)
-
-    def update_frames(self):
-        for i, cap in enumerate(self.captures):
-            ret, frame = cap.read()
-            if ret:
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                h = self.labels[i].height()
-                w = self.labels[i].width()
-                image = QImage(frame.data, frame.shape[1], frame.shape[0], QImage.Format_RGB888)
-                pixmap = QPixmap.fromImage(image).scaled(w, h, Qt.KeepAspectRatio)
-                self.labels[i].setPixmap(pixmap)
-
-    def closeEvent(self, event):
-        for cap in self.captures:
-            cap.release()
-        event.accept()
-
-import sys
 import cv2
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout,
     QGroupBox, QComboBox, QSlider, QGridLayout, QTextEdit, QSizePolicy
 )
 from PyQt5.QtGui import QFont, QImage, QPixmap
-from PyQt5.QtCore import Qt, QTimer, QTime, QProcess
+from PyQt5.QtCore import Qt, QTimer, QTime, QProcess, QThread, pyqtSignal
+
+
+class CameraThread(QThread):
+    frame_received = pyqtSignal(int, QImage)
+
+    def __init__(self, index, rtsp_url):
+        super().__init__()
+        self.index = index
+        self.rtsp_url = rtsp_url
+        self.running = True
+
+    def run(self):
+        cap = cv2.VideoCapture(self.rtsp_url)
+        while self.running:
+            ret, frame = cap.read()
+            if ret:
+                rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                h, w, ch = rgb_image.shape
+                bytes_per_line = ch * w
+                qt_image = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
+                self.frame_received.emit(self.index, qt_image)
+        cap.release()
+
+    def stop(self):
+        self.running = False
+        self.wait()
 
 
 class ControlPanelWindow(QWidget):
@@ -273,42 +241,31 @@ class ControlPanelWindow(QWidget):
             "rtsp://admin:Oirov*123@192.168.1.200:554/Streaming/Channels/401",
         ]
 
-        self.rtsp_captures = []
-        self.active_cameras = []
-
+        self.camera_threads = []
         for i, url in enumerate(rtsp_urls):
-            cap = cv2.VideoCapture(url)
-            ret, frame = cap.read()
-            if ret:
-                self.output_display.append(f"✅ Camera {i + 1} Connected\n")
-                self.rtsp_captures.append(cap)
-                self.active_cameras.append(i)
-            else:
-                self.output_display.append(f"❌ Camera {i + 1} Not Connected\n")
-                cap.release()
-                self.rtsp_captures.append(None)
+            thread = CameraThread(i, url)
+            thread.frame_received.connect(self.update_label)
+            thread.start()
+            self.camera_threads.append(thread)
+            self.output_display.append(f"✅ Started Camera {i + 1}\n")
 
-        self.camera_timer = QTimer()
-        self.camera_timer.timeout.connect(self.update_rtsp_frames)
-        self.camera_timer.start(30)
+    def update_label(self, index, image):
+        if index < len(self.camera_labels):
+            label = self.camera_labels[index]
+            pixmap = QPixmap.fromImage(image).scaled(
+                label.width(), label.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            label.setPixmap(pixmap)
 
-    def update_rtsp_frames(self):
-        for i, cap in enumerate(self.rtsp_captures):
-            if cap is not None:
-                ret, frame = cap.read()
-                if ret:
-                    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    h = self.camera_labels[i].height()
-                    w = self.camera_labels[i].width()
-                    image = QImage(rgb_frame.data, frame.shape[1], frame.shape[0], QImage.Format_RGB888)
-                    pixmap = QPixmap.fromImage(image).scaled(w, h, Qt.KeepAspectRatio)
-                    self.camera_labels[i].setPixmap(pixmap)
-                else:
-                    self.camera_labels[i].setText("NO SIGNAL")
+    def closeEvent(self, event):
+        if hasattr(self, "camera_threads"):
+            for thread in self.camera_threads:
+                thread.stop()
+        event.accept()
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    camera_widget = QWidget()  # لازم تكون معرفة قبل استخدامها في main_layout
     window = ControlPanelWindow()
     window.show()
     sys.exit(app.exec_())
