@@ -66,7 +66,7 @@ class ControlPanelWindow(QWidget):
         camera_control_layout.addLayout(self.camera_layout)
         camera_control_layout.addWidget(self.open_all_cameras_button)
 
-        camera_widget = QWidget()   
+        camera_widget = QWidget()
         camera_widget.setLayout(camera_control_layout)
 
         right_panel = QVBoxLayout()
@@ -228,22 +228,33 @@ class ControlPanelWindow(QWidget):
         self.timer_label.setText(self.time_elapsed.toString("hh:mm:ss"))
 
     def open_all_cameras(self):
-        self.output_display.append("Opening all cameras...")
-        self.camera_threads = []
-        self.rtsp_urls = [
-            "rtsp://user:password@192.168.0.101:554",
-            "rtsp://user:password@192.168.0.102:554",
-            "rtsp://user:password@192.168.0.103:554",
-            "rtsp://user:password@192.168.0.104:554"
+        self.output_display.append("فتح الكاميرات عبر RTSP...\n")
+        rtsp_urls = [
+            "rtsp://admin:Oirov*123@192.168.1.200:554/Streaming/Channels/101",
+            "rtsp://admin:Oirov*123@192.168.1.200:554/Streaming/Channels/201",
+            "rtsp://admin:Oirov*123@192.168.1.200:554/Streaming/Channels/301",
+            "rtsp://admin:Oirov*123@192.168.1.200:554/Streaming/Channels/401",
         ]
-        for idx, rtsp_url in enumerate(self.rtsp_urls):
-            thread = CameraThread(idx, rtsp_url)
-            thread.frame_received.connect(self.update_camera_frame)
-            self.camera_threads.append(thread)
+        self.camera_threads = []
+        for i, url in enumerate(rtsp_urls):
+            thread = CameraThread(i, url)
+            thread.frame_received.connect(self.update_label)
             thread.start()
+            self.camera_threads.append(thread)
+            self.output_display.append(f"✅ Started Camera {i + 1}\n")
 
-    def update_camera_frame(self, index, image):
-        self.camera_labels[index].setPixmap(QPixmap.fromImage(image))
+    def update_label(self, index, image):
+        if index < len(self.camera_labels):
+            label = self.camera_labels[index]
+            pixmap = QPixmap.fromImage(image).scaled(
+                label.width(), label.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            label.setPixmap(pixmap)
+
+    def closeEvent(self, event):
+        if hasattr(self, "camera_threads"):
+            for thread in self.camera_threads:
+                thread.stop()
+        event.accept()
 
 
 if __name__ == "__main__":
