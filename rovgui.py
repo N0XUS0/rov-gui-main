@@ -2,7 +2,7 @@ import sys
 import cv2
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout,
-    QGroupBox, QComboBox, QSlider, QGridLayout, QTextEdit, QSizePolicy
+    QGroupBox, QComboBox, QSlider, QGridLayout, QTextEdit
 )
 from PyQt5.QtGui import QFont, QImage, QPixmap
 from PyQt5.QtCore import Qt, QTimer, QTime, QProcess, QThread, pyqtSignal
@@ -18,14 +18,15 @@ class CameraThread(QThread):
         self.running = True
 
     def run(self):
-        cap = cv2.VideoCapture(self.rtsp_url)
-        while self.running:
-            ret, frame = cap.read()
+        cap = cv2.VideoCapture(self.rtsp_url, cv2.CAP_FFMPEG)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        while self.running and cap.isOpened():
+            cap.grab()
+            ret, frame = cap.retrieve()
             if ret:
                 rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 h, w, ch = rgb_image.shape
-                bytes_per_line = ch * w
-                qt_image = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
+                qt_image = QImage(rgb_image.data, w, h, ch * w, QImage.Format_RGB888)
                 self.frame_received.emit(self.index, qt_image)
         cap.release()
 
@@ -40,38 +41,35 @@ class ControlPanelWindow(QWidget):
         self.setWindowTitle("ROV Control Panel")
         self.setGeometry(200, 100, 1400, 900)
         self.setStyleSheet("background-color: #141414; color: white;")
-        self.process = None
         self.init_ui()
 
     def init_ui(self):
         main_layout = QHBoxLayout()
-
-        # كاميرات
         self.camera_layout = QGridLayout()
         self.camera_labels = []
+
         for i in range(4):
             cam_label = QLabel(f"Camera {i+1}")
             cam_label.setFixedSize(630, 390)
             cam_label.setAlignment(Qt.AlignCenter)
             cam_label.setStyleSheet("background-color: #000; color: white; border: 2px solid #555;")
             self.camera_labels.append(cam_label)
+
         self.camera_positions = [0, 1, 2, 3]
         self.update_camera_grid()
 
         self.open_all_cameras_button = QPushButton(" open cams ")
-        self.open_all_cameras_button.setStyleSheet(
-            "background-color: orange; color: white; padding: 10px; font-weight: bold;"
-        )
+        self.open_all_cameras_button.setStyleSheet("background-color: orange; color: white; padding: 10px; font-weight: bold;")
         self.open_all_cameras_button.clicked.connect(self.open_all_cameras)
 
         camera_control_layout = QVBoxLayout()
         camera_control_layout.addLayout(self.camera_layout)
         camera_control_layout.addWidget(self.open_all_cameras_button)
-        camera_widget = QWidget()
+
+        camera_widget = QWidget()   
         camera_widget.setLayout(camera_control_layout)
 
         right_panel = QVBoxLayout()
-
         actuators_box = QGroupBox("Missions")
         actuator_layout = QVBoxLayout()
         task_names = ["Upload Code", "Focus Mode", "3D Task"]
@@ -121,9 +119,7 @@ class ControlPanelWindow(QWidget):
         self.sensitivity_slider.setTickPosition(QSlider.TicksBelow)
         self.sensitivity_value_label = QLabel("50")
         self.sensitivity_value_label.setAlignment(Qt.AlignCenter)
-        self.sensitivity_slider.valueChanged.connect(
-            lambda value: self.sensitivity_value_label.setText(str(value))
-        )
+        self.sensitivity_slider.valueChanged.connect(lambda value: self.sensitivity_value_label.setText(str(value)))
         sensitivity_layout.addWidget(self.sensitivity_slider)
         sensitivity_layout.addWidget(self.sensitivity_value_label)
         sensitivity_box.setLayout(sensitivity_layout)
@@ -232,40 +228,26 @@ class ControlPanelWindow(QWidget):
         self.timer_label.setText(self.time_elapsed.toString("hh:mm:ss"))
 
     def open_all_cameras(self):
-        self.output_display.append("فتح الكاميرات عبر RTSP...\n")
-
-        rtsp_urls = [
-            "rtsp://admin:Oirov*123@192.168.1.200:554/Streaming/Channels/101",
-            "rtsp://admin:Oirov*123@192.168.1.200:554/Streaming/Channels/201",
-            "rtsp://admin:Oirov*123@192.168.1.200:554/Streaming/Channels/301",
-            "rtsp://admin:Oirov*123@192.168.1.200:554/Streaming/Channels/401",
-        ]
-
+        self.output_display.append("Opening all cameras...")
         self.camera_threads = []
-        for i, url in enumerate(rtsp_urls):
-            thread = CameraThread(i, url)
-            thread.frame_received.connect(self.update_label)
-            thread.start()
+        self.rtsp_urls = [
+            "rtsp://user:password@192.168.0.101:554",
+            "rtsp://user:password@192.168.0.102:554",
+            "rtsp://user:password@192.168.0.103:554",
+            "rtsp://user:password@192.168.0.104:554"
+        ]
+        for idx, rtsp_url in enumerate(self.rtsp_urls):
+            thread = CameraThread(idx, rtsp_url)
+            thread.frame_received.connect(self.update_camera_frame)
             self.camera_threads.append(thread)
-            self.output_display.append(f"✅ Started Camera {i + 1}\n")
+            thread.start()
 
-    def update_label(self, index, image):
-        if index < len(self.camera_labels):
-            label = self.camera_labels[index]
-            pixmap = QPixmap.fromImage(image).scaled(
-                label.width(), label.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            label.setPixmap(pixmap)
-
-    def closeEvent(self, event):
-        if hasattr(self, "camera_threads"):
-            for thread in self.camera_threads:
-                thread.stop()
-        event.accept()
+    def update_camera_frame(self, index, image):
+        self.camera_labels[index].setPixmap(QPixmap.fromImage(image))
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    camera_widget = QWidget()  # لازم تكون معرفة قبل استخدامها في main_layout
     window = ControlPanelWindow()
     window.show()
     sys.exit(app.exec_())

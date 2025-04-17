@@ -1,34 +1,24 @@
-#hazzem task
-import cv2 
+import cv2
 
-username = 'admin'  
-password = 'Oirov*123'
-ip = '192.168.1100.'  
-channel = 1 , 2 , 3 , 4
-stream = 0  # 0 للـmain stream، 1 للـsub stream
-
-# رابط RTSP
-rtsp_url = f'rtsp://{username}:{password}@{ip}/Streaming/Channels/{channel}0{stream}'
-# print ('rtsp_url')
-# # افتح الكاميرا
+rtsp_url = "rtsp://admin:Oirov*123@192.168.1.200:554/Streaming/Channels/101"
 cap = cv2.VideoCapture(rtsp_url)
 
 if not cap.isOpened():
-    print("❌ فشل الاتصال بالكاميرا")
-    exit()
+    print("NOT CONNECTED")
+else:
+    cv2.namedWindow("Hikvision Camera", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("Hikvision Camera", 1920, 1080)
 
-print("✅ تم الاتصال بالكاميرا، اضغط Q للخروج")
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("NOT CONNECTED CAM")
+            break
 
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        print("❌ لم يتم استلام الإطار من الكاميرا")
-        break
+        cv2.imshow("Hikvision Camera", frame)
 
-    cv2.imshow("كاميرا المراقبة", frame)
-
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+        if cv2.waitKey(1) == ord('q'):
+            break
 
 cap.release()
 cv2.destroyAllWindows()
