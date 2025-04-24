@@ -76,8 +76,10 @@ class ControlPanelWindow(QWidget):
         for i, name in enumerate(task_names):
             btn = QPushButton(name)
             btn.setStyleSheet("background-color: orange; padding: 10px; font-weight: bold;")
-            btn.clicked.connect(lambda _, num=i + 1: self.run_task_script(num))
+            if name == "Focus Mode":
+                btn.clicked.connect(self.focus_mode_clicked)
             actuator_layout.addWidget(btn)
+
         actuators_box.setLayout(actuator_layout)
 
         sensors_box = QGroupBox("Sensors")
@@ -179,7 +181,9 @@ class ControlPanelWindow(QWidget):
         main_layout.addWidget(camera_widget)
         main_layout.addWidget(right_widget)
         self.setLayout(main_layout)
-
+    def focus_mode_clicked(self):
+        print(True)  
+        self.output_display.append("Focus Mode: True")  
     def run_task_script(self, task_number):
         script_name = f"task{task_number}.py"
         self.output_display.append(f"Running {script_name}...\n")
