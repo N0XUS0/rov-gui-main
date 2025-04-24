@@ -78,9 +78,11 @@ class ControlPanelWindow(QWidget):
             btn.setStyleSheet("background-color: orange; padding: 10px; font-weight: bold;")
             if name == "Focus Mode":
                 btn.clicked.connect(self.focus_mode_clicked)
+            elif name == "3D Task":
+                btn.clicked.connect(lambda _, n=i: self.run_task_script(n + 1))  # i=2 ⇒ task1.py
             actuator_layout.addWidget(btn)
 
-        actuators_box.setLayout(actuator_layout)
+        actuators_box.setLayout(actuator_layout)    
 
         sensors_box = QGroupBox("Sensors")
         sensor_layout = QVBoxLayout()
